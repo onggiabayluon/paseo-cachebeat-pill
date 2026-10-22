@@ -120,8 +120,8 @@ export function pillLabel(s: CacheStatus, est: Estimate, now: number): string | 
   if (!s.supported) return null;
   if (est.phase === "unknown") return "cache ?";
   if (s.beat.state === "on") {
-    if (est.nextBeatAt !== null) return `\u2665 ${formatDuration(est.nextBeatAt - now)}`;
-    return est.phase === "warm" ? "\u2665 stopped" : "cold";
+    if (est.nextBeatAt !== null) return formatDuration(est.nextBeatAt - now);
+    return est.phase === "warm" ? "beats stopped" : "cache cold";
   }
   if (est.phase === "cold") return "cache cold";
   return `${s.ttl} \u00b7 ${formatDuration((est.expiresAt ?? now) - now)}`;

@@ -11,7 +11,8 @@
     "index.server.tsx",
     "client/",
     "server/",
-    "shared/"
+    "shared/",
+    "assets/"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -25,5 +26,6 @@
     "react-native": "0.81.5",
     "typescript": "^5.9.3",
     "zod": "^4.4.3"
-  }
+  },
+  "description": "Shows a Claude agent's prompt cache state as a composer pill, with cachebeat controls."
 }

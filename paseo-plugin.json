@@ -1,7 +1,10 @@
 {
   "id": "cachebeat-pill",
-  "$comment": "Add \"name\": \"My plugin\" to set a display name. Add \"icon\": \"assets/icon.png\" for a PNG inside the package. Add image or video paths (relative to this manifest) or HTTPS URLs to media. Include local assets in package.json files.",
-  "media": [],
+  "name": "Cachebeat pill",
+  "description": "Shows a Claude agent's prompt cache state as a composer pill, with cachebeat controls.",
+  "media": [
+    "assets/screenshot.png"
+  ],
   "requirements": {
     "paseo": ">=0.11.1"
   }

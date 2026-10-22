@@ -25,7 +25,7 @@ function useNow(everyMs: number): number {
 }
 
 export function CachePopover(props: PluginButtonContentProps) {
-  const { theme, layout, close } = props;
+  const { theme, layout } = props;
   const agentId = props.context === "agent" ? props.agentId : null;
   const paseo = usePaseo();
   const getStatus = useRpc(cacheStatusRpc);
@@ -180,13 +180,8 @@ export function CachePopover(props: PluginButtonContentProps) {
           <Action key={minutes} id={`i${minutes}`} label={`${minutes}m`} text={`/cachebeat ${minutes}`} />
         ))}
       </View>
-      <Text style={styles.hint}>
-        Times are estimated from the transcript: beats never appear there. Sync exact state asks cachebeat for its own numbers. Prices are API list prices, not subscription quota.
-      </Text>
+      <Text style={styles.hint}>Times are estimates; Sync exact state asks cachebeat. API list prices.</Text>
       {note ? <Text style={styles.hint}>{note}</Text> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={close}>
-        <Text style={styles.hint}>Close</Text>
-      </Pressable>
     </View>
   );
 }
