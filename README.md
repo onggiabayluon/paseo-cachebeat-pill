@@ -6,6 +6,17 @@ A [Paseo](https://paseo.sh) plugin that shows the prompt-cache state of Claude a
 
 See [OVERVIEW.md](OVERVIEW.md) for what it shows and its limits.
 
+## Prerequisite
+
+The card controls [cachebeat](https://github.com/404Mayank/cachebeat), a separate Claude Code plugin. Install it in Claude Code first (see its README for the current steps):
+
+```sh
+claude plugin marketplace add 404Mayank/cachebeat
+claude plugin install cachebeat@cachebeat
+```
+
+Cachebeat is off for new sessions. Turn it on per session with `/cachebeat on`, or press **Turn on** in the card. It starts beating after the session's second turn.
+
 ## Install
 
 ```sh
