@@ -2,6 +2,8 @@
 
 A [Paseo](https://paseo.sh) plugin that shows the prompt-cache state of Claude agents as a composer pill, with a card for turning [cachebeat](https://github.com/404Mayank/cachebeat) on or off, beating now and setting its interval.
 
+![The prompt cache card opened from the composer pill](assets/screenshot.png)
+
 See [OVERVIEW.md](OVERVIEW.md) for what it shows and its limits.
 
 ## Install
