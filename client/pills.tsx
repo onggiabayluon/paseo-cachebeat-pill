@@ -1,5 +1,6 @@
 import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { cacheStatusRpc, estimate, pillLabel, type CacheStatus } from "../shared/status";
+import { HeartFilled, HeartOutline } from "./heart";
 import { CachePopover } from "./popover";
 
 const POLL_MS = 20_000;
@@ -39,8 +40,9 @@ export function contributeCachePills(client: PluginClientContext): () => void {
       entry.registration = null;
       return;
     }
+    const icon = status.beat.state === "on" ? HeartFilled : HeartOutline;
     if (entry.registration) {
-      entry.registration.update({ label, title: pillTitle(status) });
+      entry.registration.update({ label, title: pillTitle(status), icon });
       return;
     }
     entry.registration = client.addComposerPill({
@@ -50,7 +52,7 @@ export function contributeCachePills(client: PluginClientContext): () => void {
       button: {
         title: pillTitle(status),
         label,
-        icon: "Heart",
+        icon,
         behavior: { kind: "popover", Content: CachePopover },
       },
     });
