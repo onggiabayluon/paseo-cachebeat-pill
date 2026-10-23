@@ -62,13 +62,14 @@ export async function readCacheStatus(path: string): Promise<Omit<CacheStatus, "
   let reply: ReturnType<typeof parseBeatReply> = null;
   let replyAt: number | null = null;
   let sawStateReply = false;
+  let sawLocalOutput = false;
 
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
     const isLocalOutput = line.includes("local-command-stdout>cachebeat:");
     const mayHaveUsage = line.includes('"usage"');
     if (!isLocalOutput && !mayHaveUsage) continue;
-    if (reply !== null && lastRequestAt !== null && ttl !== null) break;
+    if (sawLocalOutput && lastRequestAt !== null && ttl !== null) break;
     let entry: Record<string, unknown>;
     try {
       entry = JSON.parse(line) as Record<string, unknown>;
@@ -76,7 +77,9 @@ export async function readCacheStatus(path: string): Promise<Omit<CacheStatus, "
       continue;
     }
     const at = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
-    if (isLocalOutput && reply === null) {
+    if (isLocalOutput && !sawLocalOutput) {
+      // Only the newest cachebeat output counts; an older "on" must not outlive a newer line we can't parse.
+      sawLocalOutput = true;
       reply = parseBeatReply(line);
       replyAt = Number.isNaN(at) ? null : at;
       sawStateReply = reply !== null;

@@ -129,7 +129,7 @@ export function pillLabel(s: CacheStatus, est: Estimate, now: number): string | 
 
 /** Parses cachebeat's own reply to `/cachebeat on|off|<n>|` from a transcript line. */
 export function parseBeatReply(text: string): { state: "on" | "off"; intervalMin: number | null; beats: number | null; nextIn: string | null } | null {
-  const m = /cachebeat: (?:this session|this folder|all folders): (on|off)(?:, every (\d+)m)?/.exec(text);
+  const m = /cachebeat: (?:this session|this folder|all folders): (?:already )?(on|off)(?:, every (\d+)m)?/.exec(text);
   if (!m) return null;
   const beats = /(\d+) beats?\b/.exec(text);
   const next = /next beat in ([0-9a-z ]+?)(?: ?[\u00b7<"\\]|$)/.exec(text);
