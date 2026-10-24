@@ -1,5 +1,5 @@
 import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
-import { cacheStatusRpc, estimate, pillLabel, type CacheStatus } from "../shared/status";
+import { cacheStatusRpc, effectiveBeat, estimate, pillLabel, type CacheStatus } from "../shared/status";
 import { HeartFilled, HeartOutline } from "./heart";
 import { takeQueuedCommand } from "./pending";
 import { CachePopover } from "./popover";
@@ -19,10 +19,31 @@ function pillTitle(status: CacheStatus): string {
 export function contributeCachePills(client: PluginClientContext): () => void {
   const tracked = new Map<string, Tracked>();
   const lifetime = new AbortController();
+  const agentStatus = new Map<string, string>();
+  const synced = new Set<string>();
 
   function drop(agentId: string): void {
     tracked.get(agentId)?.registration?.remove();
     tracked.delete(agentId);
+    agentStatus.delete(agentId);
+    synced.delete(agentId);
+  }
+
+  /**
+   * A session with no /cachebeat reply in its transcript is asked once, while idle (a message sent
+   * mid-turn interrupts it). The reply lands in the transcript, so it is never asked again, and the
+   * timeline transformer keeps the exchange out of the chat.
+   */
+  function syncOnce(agentId: string, status: CacheStatus): void {
+    const needed =
+      status.supported && status.beat.state === "unknown" && status.defaultOn !== null && status.lastRequestAt !== null;
+    if (!needed || agentStatus.get(agentId) !== "idle" || synced.has(agentId)) return;
+    synced.add(agentId);
+    client.paseo.agents
+      .ref(agentId)
+      .send("/cachebeat")
+      .then(() => setTimeout(() => void refresh(agentId), 2500))
+      .catch((error: unknown) => console.error("[cachebeat-pill] background sync failed", error));
   }
 
   async function refresh(agentId: string): Promise<void> {
@@ -34,6 +55,7 @@ export function contributeCachePills(client: PluginClientContext): () => void {
     } catch {
       return; // the next tick tries again
     }
+    syncOnce(agentId, status);
     const now = Date.now();
     const label = pillLabel(status, estimate(status, now), now);
     if (label === null) {
@@ -41,7 +63,7 @@ export function contributeCachePills(client: PluginClientContext): () => void {
       entry.registration = null;
       return;
     }
-    const icon = status.beat.state === "on" ? HeartFilled : HeartOutline;
+    const icon = effectiveBeat(status) === "on" ? HeartFilled : HeartOutline;
     if (entry.registration) {
       entry.registration.update({ label, title: pillTitle(status), icon });
       return;
@@ -71,8 +93,9 @@ export function contributeCachePills(client: PluginClientContext): () => void {
     }
   }
 
-  function track(agent: { id: string; workspaceId?: string | null; provider?: string | null }): void {
+  function track(agent: { id: string; status: string; workspaceId?: string | null; provider?: string | null }): void {
     if (!agent.workspaceId || !String(agent.provider ?? "").startsWith("claude")) return;
+    agentStatus.set(agent.id, agent.status);
     if (tracked.has(agent.id)) return;
     tracked.set(agent.id, { workspaceId: agent.workspaceId, registration: null });
     void refresh(agent.id);

@@ -1,8 +1,9 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { cacheStatusRpc, type CacheStatus } from "./shared/status";
-import { findTranscript, readCacheStatus } from "./server/transcript";
+import { findTranscript, readCacheStatus, readDefaultOn } from "./server/transcript";
 
 const EMPTY: Omit<CacheStatus, "supported" | "reason"> = {
+  defaultOn: null,
   model: null,
   ttl: null,
   cachedTokens: null,
@@ -29,7 +30,7 @@ export default function contribute(server: PluginServerContext) {
       if (path === null) return { supported: false, reason: "Transcript not found", ...EMPTY };
       transcripts.set(agentId, path);
     }
-    return { supported: true, ...(await readCacheStatus(path)) };
+    return { supported: true, defaultOn: await readDefaultOn(), ...(await readCacheStatus(path)) };
   });
 
   return () => transcripts.clear();

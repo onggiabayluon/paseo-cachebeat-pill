@@ -20,6 +20,8 @@ export const cacheStatusSchema = z.object({
   cachedTokens: z.number().nullable(),
   /** Epoch ms of the last real request (beats never appear in the transcript). */
   lastRequestAt: z.number().nullable(),
+  /** cachebeat's `defaultOn` setting; null when cachebeat's store was not found. */
+  defaultOn: z.boolean().nullable(),
   beat: z.object({
     state: z.enum(["on", "off", "unknown"]),
     intervalMin: z.number().nullable(),
@@ -30,6 +32,15 @@ export const cacheStatusSchema = z.object({
   }),
 });
 export type CacheStatus = z.infer<typeof cacheStatusSchema>;
+
+/**
+ * on/off as far as the transcript shows. A session with no /cachebeat reply took the plugin's
+ * `defaultOn` when it started, so that is the best guess; without cachebeat installed it stays unknown.
+ */
+export function effectiveBeat(s: CacheStatus): "on" | "off" | "unknown" {
+  if (s.beat.state !== "unknown") return s.beat.state;
+  return s.defaultOn === null ? "unknown" : s.defaultOn ? "on" : "off";
+}
 
 export const cacheStatusRpc = defineRpc({
   name: "cachebeat-pill.status",
@@ -53,7 +64,7 @@ export function estimate(s: CacheStatus, now: number): Estimate {
   const ttlMs = TTL_MIN[s.ttl] * 60_000;
   const last = s.lastRequestAt;
   const intervalMin = s.beat.intervalMin ?? AUTO_BEAT_MIN[s.ttl];
-  if (s.beat.state !== "on") {
+  if (effectiveBeat(s) !== "on") {
     const expiresAt = last + ttlMs;
     return { phase: now < expiresAt ? "warm" : "cold", expiresAt, nextBeatAt: null, beatsStopAt: null, intervalMin: null };
   }
@@ -118,14 +129,14 @@ export function formatMoney(usd: number): string {
 /** The short text on the pill; null hides the pill. */
 export function pillLabel(s: CacheStatus, est: Estimate, now: number): string | null {
   const label = cacheLabel(s, est, now);
-  // No /cachebeat reply in the transcript: a session that started on by default looks the same as an off one.
-  return label !== null && s.beat.state === "unknown" ? `${label} \u00b7 beat ?` : label;
+  // Neither a /cachebeat reply nor a known default: the pill cannot tell on from off.
+  return label !== null && effectiveBeat(s) === "unknown" ? `${label} \u00b7 beat ?` : label;
 }
 
 function cacheLabel(s: CacheStatus, est: Estimate, now: number): string | null {
   if (!s.supported) return null;
   if (est.phase === "unknown") return "cache ?";
-  if (s.beat.state === "on") {
+  if (effectiveBeat(s) === "on") {
     if (est.nextBeatAt !== null) return formatDuration(est.nextBeatAt - now);
     return est.phase === "warm" ? "beats stopped" : "cache cold";
   }

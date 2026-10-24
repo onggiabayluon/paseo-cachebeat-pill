@@ -6,6 +6,7 @@ import { queueCommand } from "./pending";
 import {
   cacheStatusRpc,
   costs,
+  effectiveBeat,
   estimate,
   formatClock,
   formatDuration,
@@ -86,7 +87,7 @@ export function CachePopover(props: PluginButtonContentProps) {
 
   const est = estimate(status, now);
   const cost = costs(status);
-  const on = status.beat.state === "on";
+  const on = effectiveBeat(status) === "on";
   const phaseColor =
     est.phase === "warm" ? theme.colors.statusSuccess : est.phase === "cold" ? theme.colors.statusDanger : theme.colors.statusWarning;
   const phaseText = est.phase === "warm" ? "Warm" : est.phase === "cold" ? "Cold" : "Unknown";
@@ -153,11 +154,11 @@ export function CachePopover(props: PluginButtonContentProps) {
       <Row
         k="Cachebeat"
         v={
-          status.beat.state === "unknown"
+          status.beat.state === "unknown" && !on && status.defaultOn === null
             ? "unknown, press Sync exact state"
             : on
-              ? `on, every ${est.intervalMin ?? status.beat.intervalMin ?? "?"}m`
-              : "off"
+              ? `on, every ${est.intervalMin ?? status.beat.intervalMin ?? "?"}m${status.beat.state === "unknown" ? " (default)" : ""}`
+              : `off${status.beat.state === "unknown" ? " (default)" : ""}`
         }
       />
       {est.nextBeatAt !== null ? (

@@ -1,12 +1,29 @@
-import { open, readdir, stat } from "node:fs/promises";
+import { open, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseBeatReply, type CacheStatus, type Ttl } from "../shared/status";
 
 const TAIL_BYTES = 6 * 1024 * 1024;
 
+function claudeDir(): string {
+  return process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
+}
+
 function claudeRoot(): string {
-  return join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects");
+  return join(claudeDir(), "projects");
+}
+
+/** cachebeat's `defaultOn` setting, or null when its settings file does not exist. */
+export async function readDefaultOn(): Promise<boolean | null> {
+  const dir = join(claudeDir(), "plugins", "store");
+  try {
+    const name = (await readdir(dir)).find((entry) => entry.startsWith("cachebeat_") && entry.endsWith(".json"));
+    if (name === undefined) return null;
+    const store = JSON.parse(await readFile(join(dir, name), "utf8")) as { settings?: { defaultOn?: unknown } };
+    return typeof store.settings?.defaultOn === "boolean" ? store.settings.defaultOn : false;
+  } catch {
+    return null;
+  }
 }
 
 /** Finds `<projects>/<cwd-slug>/<sessionId>.jsonl` without needing the cwd slug. */
@@ -126,7 +143,7 @@ interface Usage {
 }
 
 /** Reads cache facts for one session from the tail of its Claude Code transcript. */
-export async function readCacheStatus(path: string): Promise<Omit<CacheStatus, "supported" | "reason">> {
+export async function readCacheStatus(path: string): Promise<Omit<CacheStatus, "supported" | "reason" | "defaultOn">> {
   const lines = await readTail(path);
   let model: string | null = null;
   let cachedTokens: number | null = null;
