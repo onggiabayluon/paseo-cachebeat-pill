@@ -2,6 +2,7 @@ import { type PluginButtonContentProps, useAgent, usePaseo, useRpc } from "@getp
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { queueCommand } from "./pending";
 import {
   cacheStatusRpc,
   costs,
@@ -35,7 +36,7 @@ export function CachePopover(props: PluginButtonContentProps) {
     enabled: agentId !== null,
     refetchInterval: 10_000,
   });
-  // A message sent while a turn runs interrupts it, so the commands wait for the agent to be idle.
+  // A message sent while a turn runs interrupts it, so a command pressed meanwhile waits for the agent to go idle.
   const running = useAgent(agentId ?? "", (agent) => agent.status === "running") ?? false;
   const now = useNow(15_000);
   const [busy, setBusy] = useState<string | null>(null);
@@ -92,6 +93,11 @@ export function CachePopover(props: PluginButtonContentProps) {
 
   async function send(label: string, text: string) {
     if (agentId === null) return;
+    if (running) {
+      queueCommand(agentId, text);
+      setNote(`Queued ${text}. It is sent when the agent goes idle, so the running turn is not interrupted.`);
+      return;
+    }
     setBusy(label);
     setNote(null);
     try {
@@ -119,9 +125,9 @@ export function CachePopover(props: PluginButtonContentProps) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
-        disabled={busy !== null || running}
+        disabled={busy !== null}
         onPress={() => void send(id, text)}
-        style={[styles.button, primary ? styles.primary : null, busy !== null || running ? { opacity: 0.5 } : null]}
+        style={[styles.button, primary ? styles.primary : null, busy !== null ? { opacity: 0.5 } : null]}
       >
         <Text style={primary ? styles.primaryText : styles.buttonText}>{busy === id ? "..." : label}</Text>
       </Pressable>
@@ -183,7 +189,6 @@ export function CachePopover(props: PluginButtonContentProps) {
         ))}
       </View>
       <Text style={styles.hint}>Times are estimates; Sync exact state asks cachebeat. API list prices.</Text>
-      {running ? <Text style={styles.hint}>The agent is running. Sending a command now would interrupt it, so the buttons unlock when it is idle.</Text> : null}
       {note ? <Text style={styles.hint}>{note}</Text> : null}
     </View>
   );
