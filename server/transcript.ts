@@ -45,6 +45,16 @@ async function readTail(path: string): Promise<string[]> {
   }
 }
 
+/**
+ * A real command-output record, not text that merely quotes one (a compaction summary and
+ * api-request blobs embed old replies, and an embedded "off" would override the live state).
+ */
+function isCommandOutputRecord(entry: Record<string, unknown>): boolean {
+  if (entry.type === "system") return entry.subtype === "local_command";
+  const content = (entry.message as { content?: unknown } | undefined)?.content;
+  return entry.type === "user" && typeof content === "string" && content.startsWith("<local-command-stdout>");
+}
+
 interface Usage {
   input_tokens?: number;
   cache_read_input_tokens?: number;
@@ -77,7 +87,7 @@ export async function readCacheStatus(path: string): Promise<Omit<CacheStatus, "
       continue;
     }
     const at = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
-    if (isLocalOutput && !sawLocalOutput) {
+    if (isLocalOutput && !sawLocalOutput && isCommandOutputRecord(entry)) {
       // Only the newest cachebeat output counts; an older "on" must not outlive a newer line we can't parse.
       sawLocalOutput = true;
       reply = parseBeatReply(line);
