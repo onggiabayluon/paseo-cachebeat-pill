@@ -55,6 +55,69 @@ function isCommandOutputRecord(entry: Record<string, unknown>): boolean {
   return entry.type === "user" && typeof content === "string" && content.startsWith("<local-command-stdout>");
 }
 
+interface ReplyScan {
+  offset: number;
+  reply: ReturnType<typeof parseBeatReply>;
+  replyAt: number | null;
+  sawStateReply: boolean;
+}
+
+const SCAN_CHUNK = 4 * 1024 * 1024;
+const scans = new Map<string, ReplyScan>();
+
+/**
+ * Newest genuine cachebeat reply in the whole transcript. A long session pushes its last reply far
+ * out of any tail window, so the file is read once and afterwards only the bytes appended since.
+ */
+async function scanReplies(path: string): Promise<ReplyScan> {
+  const file = await open(path, "r");
+  try {
+    const { size } = await file.stat();
+    let scan = scans.get(path);
+    if (!scan || scan.offset > size) scan = { offset: 0, reply: null, replyAt: null, sawStateReply: false };
+    let carry = "";
+    while (scan.offset < size) {
+      const buffer = Buffer.alloc(Math.min(SCAN_CHUNK, size - scan.offset));
+      const { bytesRead } = await file.read(buffer, 0, buffer.length, scan.offset);
+      if (bytesRead === 0) break;
+      const text = carry + buffer.toString("utf8", 0, bytesRead);
+      const end = text.lastIndexOf("\n");
+      if (end === -1) {
+        // no complete line yet: at the end of the file it is still being written, so re-read it next time
+        if (scan.offset + bytesRead >= size) break;
+        carry = text;
+        scan.offset += bytesRead;
+        continue;
+      }
+      for (const line of text.slice(0, end).split("\n")) {
+        if (!line.includes("local-command-stdout>cachebeat:")) continue;
+        let entry: Record<string, unknown>;
+        try {
+          entry = JSON.parse(line) as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+        if (!isCommandOutputRecord(entry)) continue;
+        // Only the newest cachebeat output counts; an older "on" must not outlive a newer line we can't parse.
+        const at = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
+        scan.reply = parseBeatReply(line);
+        scan.replyAt = Number.isNaN(at) ? null : at;
+        scan.sawStateReply = scan.reply !== null;
+      }
+      carry = text.slice(end + 1);
+      scan.offset += bytesRead;
+      // bytes of the unfinished last line are re-read next time
+      scan.offset -= Buffer.byteLength(carry);
+      carry = "";
+      if (scan.offset >= size) break;
+    }
+    scans.set(path, scan);
+    return scan;
+  } finally {
+    await file.close();
+  }
+}
+
 interface Usage {
   input_tokens?: number;
   cache_read_input_tokens?: number;
@@ -69,17 +132,12 @@ export async function readCacheStatus(path: string): Promise<Omit<CacheStatus, "
   let cachedTokens: number | null = null;
   let lastRequestAt: number | null = null;
   let ttl: Ttl | null = null;
-  let reply: ReturnType<typeof parseBeatReply> = null;
-  let replyAt: number | null = null;
-  let sawStateReply = false;
-  let sawLocalOutput = false;
+  const { reply, replyAt, sawStateReply } = await scanReplies(path);
 
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
-    const isLocalOutput = line.includes("local-command-stdout>cachebeat:");
-    const mayHaveUsage = line.includes('"usage"');
-    if (!isLocalOutput && !mayHaveUsage) continue;
-    if (sawLocalOutput && lastRequestAt !== null && ttl !== null) break;
+    if (!line.includes('"usage"')) continue;
+    if (lastRequestAt !== null && ttl !== null) break;
     let entry: Record<string, unknown>;
     try {
       entry = JSON.parse(line) as Record<string, unknown>;
@@ -87,13 +145,6 @@ export async function readCacheStatus(path: string): Promise<Omit<CacheStatus, "
       continue;
     }
     const at = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
-    if (isLocalOutput && !sawLocalOutput && isCommandOutputRecord(entry)) {
-      // Only the newest cachebeat output counts; an older "on" must not outlive a newer line we can't parse.
-      sawLocalOutput = true;
-      reply = parseBeatReply(line);
-      replyAt = Number.isNaN(at) ? null : at;
-      sawStateReply = reply !== null;
-    }
     const message = entry.message as { usage?: Usage; model?: string } | undefined;
     if (entry.type === "assistant" && message?.usage && entry.isSidechain !== true) {
       const usage = message.usage;
