@@ -22,7 +22,8 @@ export default function contribute(server: PluginServerContext) {
       if (!agent || !String(agent.provider).startsWith("claude")) {
         return { supported: false, reason: "Not a Claude agent", ...EMPTY };
       }
-      const sessionId = handle.runtimeInfo?.sessionId ?? null;
+      // runtimeInfo fills in late on a new agent, while persistence already names the session
+      const sessionId = handle.runtimeInfo?.sessionId ?? agent.persistence?.sessionId ?? null;
       if (sessionId === null) return { supported: false, reason: "No session yet", ...EMPTY };
       path = await findTranscript(sessionId);
       if (path === null) return { supported: false, reason: "Transcript not found", ...EMPTY };
