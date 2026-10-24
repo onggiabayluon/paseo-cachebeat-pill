@@ -117,6 +117,12 @@ export function formatMoney(usd: number): string {
 
 /** The short text on the pill; null hides the pill. */
 export function pillLabel(s: CacheStatus, est: Estimate, now: number): string | null {
+  const label = cacheLabel(s, est, now);
+  // No /cachebeat reply in the transcript: a session that started on by default looks the same as an off one.
+  return label !== null && s.beat.state === "unknown" ? `${label} \u00b7 beat ?` : label;
+}
+
+function cacheLabel(s: CacheStatus, est: Estimate, now: number): string | null {
   if (!s.supported) return null;
   if (est.phase === "unknown") return "cache ?";
   if (s.beat.state === "on") {
@@ -129,7 +135,7 @@ export function pillLabel(s: CacheStatus, est: Estimate, now: number): string | 
 
 /** Parses cachebeat's own reply to `/cachebeat on|off|<n>|` from a transcript line. */
 export function parseBeatReply(text: string): { state: "on" | "off"; intervalMin: number | null; beats: number | null; nextIn: string | null } | null {
-  const m = /cachebeat: (?:this session|this folder|all folders): (?:already )?(on|off)(?:, every (\d+)m)?/.exec(text);
+  const m = /cachebeat: (?:(?:this session|this folder|all folders): )?(?:already )?(on|off)(?:, every (\d+)m)?/.exec(text);
   if (!m) return null;
   const beats = /(\d+) beats?\b/.exec(text);
   const next = /next beat in ([0-9a-z ]+?)(?: ?[\u00b7<"\\]|$)/.exec(text);

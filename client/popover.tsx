@@ -154,7 +154,7 @@ export function CachePopover(props: PluginButtonContentProps) {
         k="Cachebeat"
         v={
           status.beat.state === "unknown"
-            ? "not seen in this session"
+            ? "unknown, press Sync exact state"
             : on
               ? `on, every ${est.intervalMin ?? status.beat.intervalMin ?? "?"}m`
               : "off"
