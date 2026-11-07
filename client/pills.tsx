@@ -30,13 +30,18 @@ export function contributeCachePills(client: PluginClientContext): () => void {
   }
 
   /**
-   * A session with no /cachebeat reply in its transcript is asked once, while idle (a message sent
-   * mid-turn interrupts it). The reply lands in the transcript, so it is never asked again, and the
+   * A session with cachebeat loaded but no /cachebeat reply in its transcript is asked once, while
+   * idle (a message sent mid-turn interrupts it). A session without cachebeat (a minimal provider
+   * that skips plugins or slash commands) is never asked. The reply lands in the transcript, so it is never asked again, and the
    * timeline transformer keeps the exchange out of the chat.
    */
   function syncOnce(agentId: string, status: CacheStatus): void {
     const needed =
-      status.supported && status.beat.state === "unknown" && status.defaultOn !== null && status.lastRequestAt !== null;
+      status.supported &&
+      status.cachebeatLoaded &&
+      status.beat.state === "unknown" &&
+      status.defaultOn !== null &&
+      status.lastRequestAt !== null;
     if (!needed || agentStatus.get(agentId) !== "idle" || synced.has(agentId)) return;
     synced.add(agentId);
     client.paseo.agents

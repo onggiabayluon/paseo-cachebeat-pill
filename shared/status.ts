@@ -20,6 +20,12 @@ export const cacheStatusSchema = z.object({
   cachedTokens: z.number().nullable(),
   /** Epoch ms of the last real request (beats never appear in the transcript). */
   lastRequestAt: z.number().nullable(),
+  /**
+   * True when the transcript shows cachebeat loaded in this session (its MCP tools are listed, or it
+   * replied). Only then is a background `/cachebeat` sent, so sessions started without plugins
+   * (a minimal provider) never receive a command they cannot run.
+   */
+  cachebeatLoaded: z.boolean(),
   /** cachebeat's `defaultOn` setting; null when cachebeat's store was not found. */
   defaultOn: z.boolean().nullable(),
   beat: z.object({

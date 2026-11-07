@@ -4,6 +4,7 @@ import { findTranscript, readCacheStatus, readDefaultOn } from "./server/transcr
 
 const EMPTY: Omit<CacheStatus, "supported" | "reason"> = {
   defaultOn: null,
+  cachebeatLoaded: false,
   model: null,
   ttl: null,
   cachedTokens: null,
@@ -30,7 +31,9 @@ export default function contribute(server: PluginServerContext) {
       if (path === null) return { supported: false, reason: "Transcript not found", ...EMPTY };
       transcripts.set(agentId, path);
     }
-    return { supported: true, defaultOn: await readDefaultOn(), ...(await readCacheStatus(path)) };
+    const { cachebeatMissing, ...status } = await readCacheStatus(path);
+    if (cachebeatMissing) return { supported: false, reason: "cachebeat is not loaded in this session", ...EMPTY };
+    return { supported: true, defaultOn: await readDefaultOn(), ...status };
   });
 
   return () => transcripts.clear();

@@ -77,6 +77,28 @@ interface ReplyScan {
   reply: ReturnType<typeof parseBeatReply>;
   replyAt: number | null;
   sawStateReply: boolean;
+  /**
+   * Whether cachebeat is loaded in this session: true once its tools or a reply of its own show up,
+   * false once Claude Code reported `/cachebeat` as an unknown command (a session started without
+   * plugins or slash commands), null while the transcript shows neither.
+   */
+  loaded: boolean | null;
+}
+
+/** The attachment Claude Code records when `/cachebeat` was sent but no such command exists. */
+function isUnknownCachebeat(entry: Record<string, unknown>): boolean {
+  const attachment = entry.attachment as { type?: unknown; commandName?: unknown } | undefined;
+  return entry.type === "attachment" && attachment?.type === "unknown_command_fallback" && attachment.commandName === "cachebeat";
+}
+
+/** A tool or MCP listing attachment that names cachebeat's own MCP tools. */
+function listsCachebeatTools(entry: Record<string, unknown>): boolean {
+  const attachment = entry.attachment as { type?: unknown } | undefined;
+  return (
+    entry.type === "attachment" &&
+    (attachment?.type === "deferred_tools_delta" || attachment?.type === "mcp_instructions_delta") &&
+    JSON.stringify(attachment).includes("mcp__cachebeat__")
+  );
 }
 
 const SCAN_CHUNK = 4 * 1024 * 1024;
@@ -91,7 +113,7 @@ async function scanReplies(path: string): Promise<ReplyScan> {
   try {
     const { size } = await file.stat();
     let scan = scans.get(path);
-    if (!scan || scan.offset > size) scan = { offset: 0, reply: null, replyAt: null, sawStateReply: false };
+    if (!scan || scan.offset > size) scan = { offset: 0, reply: null, replyAt: null, sawStateReply: false, loaded: null };
     let carry = "";
     while (scan.offset < size) {
       const buffer = Buffer.alloc(Math.min(SCAN_CHUNK, size - scan.offset));
@@ -107,14 +129,26 @@ async function scanReplies(path: string): Promise<ReplyScan> {
         continue;
       }
       for (const line of text.slice(0, end).split("\n")) {
-        if (!line.includes("local-command-stdout>cachebeat:")) continue;
+        const isReply = line.includes("local-command-stdout>cachebeat:");
+        const isUnknown = line.includes('"unknown_command_fallback"') && line.includes('"commandName":"cachebeat"');
+        const isListing = scan.loaded !== true && line.includes("mcp__cachebeat__");
+        if (!isReply && !isUnknown && !isListing) continue;
         let entry: Record<string, unknown>;
         try {
           entry = JSON.parse(line) as Record<string, unknown>;
         } catch {
           continue;
         }
-        if (!isCommandOutputRecord(entry)) continue;
+        if (isUnknown && isUnknownCachebeat(entry)) {
+          scan.loaded = false;
+          continue;
+        }
+        if (isListing && listsCachebeatTools(entry)) {
+          scan.loaded = true;
+          continue;
+        }
+        if (!isReply || !isCommandOutputRecord(entry)) continue;
+        scan.loaded = true;
         // Only the newest cachebeat output counts; an older "on" must not outlive a newer line we can't parse.
         const at = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
         scan.reply = parseBeatReply(line);
@@ -143,13 +177,15 @@ interface Usage {
 }
 
 /** Reads cache facts for one session from the tail of its Claude Code transcript. */
-export async function readCacheStatus(path: string): Promise<Omit<CacheStatus, "supported" | "reason" | "defaultOn">> {
+export async function readCacheStatus(
+  path: string,
+): Promise<Omit<CacheStatus, "supported" | "reason" | "defaultOn"> & { cachebeatMissing: boolean }> {
   const lines = await readTail(path);
   let model: string | null = null;
   let cachedTokens: number | null = null;
   let lastRequestAt: number | null = null;
   let ttl: Ttl | null = null;
-  const { reply, replyAt, sawStateReply } = await scanReplies(path);
+  const { reply, replyAt, sawStateReply, loaded } = await scanReplies(path);
 
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
@@ -180,6 +216,8 @@ export async function readCacheStatus(path: string): Promise<Omit<CacheStatus, "
   }
 
   return {
+    cachebeatMissing: loaded === false,
+    cachebeatLoaded: loaded === true,
     model,
     ttl,
     cachedTokens,
