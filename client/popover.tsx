@@ -89,6 +89,7 @@ export function CachePopover(props: PluginButtonContentProps) {
   const cost = costs(status);
   const beatState = effectiveBeat(status, now);
   const on = beatState === "on";
+  const defaultOn = beatState === "default-on";
   const phaseColor =
     est.phase === "warm" ? theme.colors.statusSuccess : est.phase === "cold" ? theme.colors.statusDanger : theme.colors.statusWarning;
   const phaseText = est.phase === "warm" ? "Warm" : est.phase === "cold" ? "Cold" : "Unknown";
@@ -159,6 +160,8 @@ export function CachePopover(props: PluginButtonContentProps) {
             ? `stopped itself ${formatDuration(now - status.stop.at)} ago: ${status.stop.why}`
             : beatState === "unknown"
               ? "unknown, press Sync exact state"
+              : defaultOn
+                ? "on by default (not synced yet)"
               : on
                 ? `on, every ${est.intervalMin ?? status.beat.intervalMin ?? "?"}m`
                 : `off${status.beat.state === "unknown" ? " (default)" : ""}`
@@ -183,7 +186,7 @@ export function CachePopover(props: PluginButtonContentProps) {
       ) : null}
       <View style={styles.rule} />
       <View style={styles.actions}>
-        <Action id="toggle" label={on ? "Turn off" : "Turn on"} text={on ? "/cachebeat off" : "/cachebeat on"} primary={!on} />
+        <Action id="toggle" label={on || defaultOn ? "Turn off" : "Turn on"} text={on || defaultOn ? "/cachebeat off" : "/cachebeat on"} primary={!(on || defaultOn)} />
         <Action id="now" label="Beat now" text="/cachebeat now" />
         <Action id="sync" label="Sync exact state" text="/cachebeat" />
       </View>

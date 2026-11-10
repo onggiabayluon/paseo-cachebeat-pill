@@ -57,13 +57,16 @@ export function stopFromStore(store: unknown, cwd: string): { at: number; why: s
 /**
  * What the pill may claim about beating. "stopped": cachebeat recorded stopping itself, after the latest
  * `/cachebeat` reply. "on" only from a reply that is not stale. With no usable reply, a default of off is
- * "off" and anything else is "unknown": the pill never assumes on.
+ * "off"; a loaded cachebeat whose default is on is "default-on" (labelled as a default, never as a confirmed
+ * "on"); anything else is "unknown": the pill never assumes on.
  */
-export function effectiveBeat(s: CacheStatus, now: number): "on" | "off" | "unknown" | "stopped" {
+export function effectiveBeat(s: CacheStatus, now: number): "on" | "off" | "unknown" | "stopped" | "default-on" {
   if (s.stop !== null && (s.beat.at === null || s.stop.at > s.beat.at)) return "stopped";
   if (s.beat.state === "off") return "off";
-  if (s.beat.state === "on") return s.beat.at !== null && now - s.beat.at <= STALE_REPLY_MS ? "on" : "unknown";
-  return s.defaultOn === false ? "off" : "unknown";
+  if (s.beat.state === "on" && s.beat.at !== null && now - s.beat.at <= STALE_REPLY_MS) return "on";
+  // No trusted reply: no reply, a stale or untimed "on".
+  if (s.beat.state === "unknown" && s.defaultOn === false) return "off";
+  return s.cachebeatLoaded && s.defaultOn === true ? "default-on" : "unknown";
 }
 
 export const cacheStatusRpc = defineRpc({
@@ -153,8 +156,11 @@ export function formatMoney(usd: number): string {
 /** The short text on the pill; null hides the pill. */
 export function pillLabel(s: CacheStatus, est: Estimate, now: number): string | null {
   const label = cacheLabel(s, est, now);
+  if (label === null) return null;
+  const beat = effectiveBeat(s, now);
   // Neither a /cachebeat reply nor a known default: the pill cannot tell on from off.
-  return label !== null && effectiveBeat(s, now) === "unknown" ? `${label} \u00b7 beat ?` : label;
+  if (beat === "unknown") return `${label} \u00b7 beat ?`;
+  return beat === "default-on" ? `${label} \u00b7 beat (default)` : label;
 }
 
 function cacheLabel(s: CacheStatus, est: Estimate, now: number): string | null {

@@ -21,8 +21,27 @@ function status(over: Partial<CacheStatus> = {}, beat: Partial<CacheStatus["beat
 }
 
 test("a default-on guess is not shown as on", () => {
-  assert.equal(effectiveBeat(status(), NOW), "unknown");
-  assert.match(pillLabel(status(), estimate(status(), NOW), NOW) ?? "", /beat \?/);
+  assert.equal(effectiveBeat(status(), NOW), "default-on");
+  assert.match(pillLabel(status(), estimate(status(), NOW), NOW) ?? "", /beat \(default\)/);
+  assert.equal(estimate(status(), NOW).nextBeatAt, null);
+});
+
+test("no reply stays unknown when the default is null or cachebeat is not loaded", () => {
+  for (const over of [{ defaultOn: null }, { cachebeatLoaded: false }]) {
+    const s = status(over);
+    assert.equal(effectiveBeat(s, NOW), "unknown");
+    assert.match(pillLabel(s, estimate(s, NOW), NOW) ?? "", /beat \?/);
+  }
+});
+
+test("a stale or untimed on reply falls back to default-on", () => {
+  assert.equal(effectiveBeat(status({}, { state: "on", intervalMin: 4, at: NOW - 26 * 60 * MIN }), NOW), "default-on");
+  assert.equal(effectiveBeat(status({}, { state: "on", intervalMin: 4, at: null }), NOW), "default-on");
+});
+
+test("a confirmed off reply and a self-stop beat default-on", () => {
+  assert.equal(effectiveBeat(status({}, { state: "off", at: NOW - MIN }), NOW), "off");
+  assert.equal(effectiveBeat(status({ stop: { at: NOW - MIN, why: "x" } }), NOW), "stopped");
 });
 
 test("a default-off guess stays off", () => {
@@ -34,8 +53,8 @@ test("a fresh /cachebeat on reply is on", () => {
   assert.equal(effectiveBeat(s, NOW), "on");
 });
 
-test("an old on reply is unknown, not on", () => {
-  const s = status({}, { state: "on", intervalMin: 4, at: NOW - 26 * 60 * MIN });
+test("an old on reply is not on", () => {
+  const s = status({ defaultOn: null }, { state: "on", intervalMin: 4, at: NOW - 26 * 60 * MIN });
   assert.equal(effectiveBeat(s, NOW), "unknown");
 });
 
@@ -61,6 +80,6 @@ test("stopFromStore picks the folder's newest entry, ignoring junk", () => {
 });
 
 test("an on reply with no timestamp is unknown, since its age cannot be told", () => {
-  const s = status({}, { state: "on", intervalMin: 4, at: null });
+  const s = status({ defaultOn: null }, { state: "on", intervalMin: 4, at: null });
   assert.equal(effectiveBeat(s, NOW), "unknown");
 });

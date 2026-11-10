@@ -68,7 +68,8 @@ export function contributeCachePills(client: PluginClientContext): () => void {
       entry.registration = null;
       return;
     }
-    const icon = effectiveBeat(status, now) === "on" ? HeartFilled : HeartOutline;
+    const beat = effectiveBeat(status, now);
+    const icon = beat === "on" || beat === "default-on" ? HeartFilled : HeartOutline;
     if (entry.registration) {
       entry.registration.update({ label, title: pillTitle(status), icon });
       return;

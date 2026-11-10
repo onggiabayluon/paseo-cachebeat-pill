@@ -35,7 +35,7 @@ export default function contribute(server: PluginServerContext) {
       transcripts.set(agentId, path);
     }
     const { cachebeatMissing, ...status } = await readCacheStatus(path);
-    if (cachebeatMissing) return { supported: false, reason: "cachebeat is not loaded in this session", ...EMPTY };
+    if (cachebeatMissing) return { supported: false, reason: "cachebeat is not loaded in this session: type /reload-plugins in this chat", ...EMPTY };
     const cwd = folders.get(agentId);
     const stop = cwd === undefined ? null : await readStop(cwd);
     return { supported: true, defaultOn: await readDefaultOn(), stop, ...status };
