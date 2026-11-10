@@ -59,3 +59,8 @@ test("stopFromStore picks the folder's newest entry, ignoring junk", () => {
   assert.equal(stopFromStore(null, "/a"), null);
   assert.equal(stopFromStore({ stops: 3 }, "/a"), null);
 });
+
+test("an on reply with no timestamp is unknown, since its age cannot be told", () => {
+  const s = status({}, { state: "on", intervalMin: 4, at: null });
+  assert.equal(effectiveBeat(s, NOW), "unknown");
+});

@@ -62,7 +62,7 @@ export function stopFromStore(store: unknown, cwd: string): { at: number; why: s
 export function effectiveBeat(s: CacheStatus, now: number): "on" | "off" | "unknown" | "stopped" {
   if (s.stop !== null && (s.beat.at === null || s.stop.at > s.beat.at)) return "stopped";
   if (s.beat.state === "off") return "off";
-  if (s.beat.state === "on") return s.beat.at !== null && now - s.beat.at > STALE_REPLY_MS ? "unknown" : "on";
+  if (s.beat.state === "on") return s.beat.at !== null && now - s.beat.at <= STALE_REPLY_MS ? "on" : "unknown";
   return s.defaultOn === false ? "off" : "unknown";
 }
 
