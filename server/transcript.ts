@@ -9,8 +9,21 @@ function claudeDir(): string {
   return process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
 }
 
-function claudeRoot(): string {
-  return join(claudeDir(), "projects");
+/**
+ * Every Claude config dir that can hold session transcripts: the daemon's own, the default one,
+ * and sibling profiles such as ~/.claude-minimal (Paseo provider `claude-minimal`).
+ */
+async function claudeRoots(): Promise<string[]> {
+  const home = homedir();
+  const dirs = new Set<string>([claudeDir(), join(home, ".claude")]);
+  try {
+    for (const entry of await readdir(home)) {
+      if (entry.startsWith(".claude")) dirs.add(join(home, entry));
+    }
+  } catch {
+    // home is unreadable: fall back to the two known dirs
+  }
+  return [...dirs].map((dir) => join(dir, "projects"));
 }
 
 /** cachebeat's `defaultOn` setting, or null when its settings file does not exist. */
@@ -28,20 +41,21 @@ export async function readDefaultOn(): Promise<boolean | null> {
 
 /** Finds `<projects>/<cwd-slug>/<sessionId>.jsonl` without needing the cwd slug. */
 export async function findTranscript(sessionId: string): Promise<string | null> {
-  const root = claudeRoot();
-  let dirs: string[];
-  try {
-    dirs = await readdir(root);
-  } catch {
-    return null;
-  }
-  for (const dir of dirs) {
-    const path = join(root, dir, `${sessionId}.jsonl`);
+  for (const root of await claudeRoots()) {
+    let dirs: string[];
     try {
-      await stat(path);
-      return path;
+      dirs = await readdir(root);
     } catch {
-      // not in this project directory
+      continue;
+    }
+    for (const dir of dirs) {
+      const path = join(root, dir, `${sessionId}.jsonl`);
+      try {
+        await stat(path);
+        return path;
+      } catch {
+        // not in this project directory
+      }
     }
   }
   return null;
