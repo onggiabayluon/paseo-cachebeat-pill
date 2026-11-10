@@ -1,7 +1,7 @@
 import { open, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { parseBeatReply, type CacheStatus, type Ttl } from "../shared/status";
+import { dirname, join } from "node:path";
+import { parseBeatReply, stopFromStore, type CacheStatus, type Ttl } from "../shared/status";
 
 const TAIL_BYTES = 6 * 1024 * 1024;
 
@@ -37,6 +37,32 @@ export async function readDefaultOn(): Promise<boolean | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The newest record of cachebeat stopping itself in `cwd`, from the `stops` key of its store in every
+ * Claude profile dir. Null when none, or when no store is readable.
+ */
+export async function readStop(cwd: string): Promise<{ at: number; why: string } | null> {
+  let newest: { at: number; why: string } | null = null;
+  for (const root of await claudeRoots()) {
+    const dir = join(dirname(root), "plugins", "store");
+    let names: string[];
+    try {
+      names = (await readdir(dir)).filter((entry) => entry.startsWith("cachebeat_") && entry.endsWith(".json"));
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      try {
+        const found = stopFromStore(JSON.parse(await readFile(join(dir, name), "utf8")), cwd);
+        if (found && (newest === null || found.at > newest.at)) newest = found;
+      } catch {
+        // unreadable or half-written store: no signal from it
+      }
+    }
+  }
+  return newest;
 }
 
 /** Finds `<projects>/<cwd-slug>/<sessionId>.jsonl` without needing the cwd slug. */
@@ -193,7 +219,7 @@ interface Usage {
 /** Reads cache facts for one session from the tail of its Claude Code transcript. */
 export async function readCacheStatus(
   path: string,
-): Promise<Omit<CacheStatus, "supported" | "reason" | "defaultOn"> & { cachebeatMissing: boolean }> {
+): Promise<Omit<CacheStatus, "supported" | "reason" | "defaultOn" | "stop"> & { cachebeatMissing: boolean }> {
   const lines = await readTail(path);
   let model: string | null = null;
   let cachedTokens: number | null = null;
@@ -238,6 +264,7 @@ export async function readCacheStatus(
     lastRequestAt,
     beat: {
       state: reply?.state ?? "unknown",
+      at: reply ? replyAt : null,
       intervalMin: reply?.intervalMin ?? null,
       report: sawStateReply && reply && (reply.beats !== null || reply.nextIn !== null) ? { at: replyAt, beats: reply.beats, nextIn: reply.nextIn } : null,
     },

@@ -15,7 +15,8 @@
     "assets/"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test shared/status.test.ts"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.11.1",

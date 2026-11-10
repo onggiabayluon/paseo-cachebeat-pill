@@ -28,9 +28,13 @@ export const cacheStatusSchema = z.object({
   cachebeatLoaded: z.boolean(),
   /** cachebeat's `defaultOn` setting; null when cachebeat's store was not found. */
   defaultOn: z.boolean().nullable(),
+  /** cachebeat stopped itself in this session's folder (it records `stops` in its store); null when it did not. */
+  stop: z.object({ at: z.number(), why: z.string() }).nullable(),
   beat: z.object({
     state: z.enum(["on", "off", "unknown"]),
     intervalMin: z.number().nullable(),
+    /** Epoch ms of the `/cachebeat` reply that told the state; null when none or untimed. */
+    at: z.number().nullable(),
     /** Exact numbers from the last `/cachebeat` status line, when one exists. */
     report: z
       .object({ at: z.number().nullable(), beats: z.number().nullable(), nextIn: z.string().nullable() })
@@ -39,13 +43,27 @@ export const cacheStatusSchema = z.object({
 });
 export type CacheStatus = z.infer<typeof cacheStatusSchema>;
 
+/** An "on" reply older than this may have been overtaken by something cachebeat did not report. */
+export const STALE_REPLY_MS = 60 * 60_000;
+
+/** The entry cachebeat's store holds for a folder under `stops`, or null when absent or malformed. */
+export function stopFromStore(store: unknown, cwd: string): { at: number; why: string } | null {
+  const stops = (store as { stops?: unknown } | null)?.stops;
+  if (typeof stops !== "object" || stops === null) return null;
+  const entry = (stops as Record<string, unknown>)[cwd] as { at?: unknown; why?: unknown } | undefined;
+  return typeof entry?.at === "number" && typeof entry.why === "string" ? { at: entry.at, why: entry.why } : null;
+}
+
 /**
- * on/off as far as the transcript shows. A session with no /cachebeat reply took the plugin's
- * `defaultOn` when it started, so that is the best guess; without cachebeat installed it stays unknown.
+ * What the pill may claim about beating. "stopped": cachebeat recorded stopping itself, after the latest
+ * `/cachebeat` reply. "on" only from a reply that is not stale. With no usable reply, a default of off is
+ * "off" and anything else is "unknown": the pill never assumes on.
  */
-export function effectiveBeat(s: CacheStatus): "on" | "off" | "unknown" {
-  if (s.beat.state !== "unknown") return s.beat.state;
-  return s.defaultOn === null ? "unknown" : s.defaultOn ? "on" : "off";
+export function effectiveBeat(s: CacheStatus, now: number): "on" | "off" | "unknown" | "stopped" {
+  if (s.stop !== null && (s.beat.at === null || s.stop.at > s.beat.at)) return "stopped";
+  if (s.beat.state === "off") return "off";
+  if (s.beat.state === "on") return s.beat.at !== null && now - s.beat.at > STALE_REPLY_MS ? "unknown" : "on";
+  return s.defaultOn === false ? "off" : "unknown";
 }
 
 export const cacheStatusRpc = defineRpc({
@@ -70,7 +88,7 @@ export function estimate(s: CacheStatus, now: number): Estimate {
   const ttlMs = TTL_MIN[s.ttl] * 60_000;
   const last = s.lastRequestAt;
   const intervalMin = s.beat.intervalMin ?? AUTO_BEAT_MIN[s.ttl];
-  if (effectiveBeat(s) !== "on") {
+  if (effectiveBeat(s, now) !== "on") {
     const expiresAt = last + ttlMs;
     return { phase: now < expiresAt ? "warm" : "cold", expiresAt, nextBeatAt: null, beatsStopAt: null, intervalMin: null };
   }
@@ -136,13 +154,16 @@ export function formatMoney(usd: number): string {
 export function pillLabel(s: CacheStatus, est: Estimate, now: number): string | null {
   const label = cacheLabel(s, est, now);
   // Neither a /cachebeat reply nor a known default: the pill cannot tell on from off.
-  return label !== null && effectiveBeat(s) === "unknown" ? `${label} \u00b7 beat ?` : label;
+  return label !== null && effectiveBeat(s, now) === "unknown" ? `${label} \u00b7 beat ?` : label;
 }
 
 function cacheLabel(s: CacheStatus, est: Estimate, now: number): string | null {
   if (!s.supported) return null;
   if (est.phase === "unknown") return "cache ?";
-  if (effectiveBeat(s) === "on") {
+  if (effectiveBeat(s, now) === "stopped") {
+    return est.phase === "warm" ? `beats stopped \u00b7 ${formatDuration((est.expiresAt ?? now) - now)}` : "cache cold";
+  }
+  if (effectiveBeat(s, now) === "on") {
     if (est.nextBeatAt !== null) return formatDuration(est.nextBeatAt - now);
     return est.phase === "warm" ? "beats stopped" : "cache cold";
   }

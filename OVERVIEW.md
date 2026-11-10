@@ -4,6 +4,8 @@ The card shows the model, the cache lifetime (1 hour or 5 minutes), the size of 
 
 The plugin reads the agent's Claude Code transcript on the daemon machine. Beats never appear in a transcript, so the next beat and the lapse time are estimates from the last real request. Sync exact state runs `/cachebeat`, which prints cachebeat's real beat count and next beat; the card shows that report with its age.
 
+The card never assumes beating is on. An "on" counts only from a `/cachebeat` reply less than an hour old; with no reply, or an older one, the card says unknown (a default of off still shows off). When cachebeat stops itself (for example after two cache misses in a row) it records that in its store under `stops`, by folder; the card reads it and shows "stopped itself" with the reason, as long as no newer `/cachebeat` reply says otherwise. This needs the cachebeat fork at github.com/onggiabayluon/cachebeat (0.9.3 or later). Two agents in one folder share that record.
+
 ## Before you use it
 
 The controls on the card drive [cachebeat](https://github.com/404Mayank/cachebeat), a separate Claude Code plugin by someone else. Install it in Claude Code first; its README has the setup steps and the Claude Code version it needs. This plugin does not install it. Without cachebeat the pill still shows the cache lifetime and the time left, but the buttons do nothing useful. Cachebeat is off for each new session until you turn it on, and it starts beating after the session's second turn.

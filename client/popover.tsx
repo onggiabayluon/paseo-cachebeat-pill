@@ -87,7 +87,8 @@ export function CachePopover(props: PluginButtonContentProps) {
 
   const est = estimate(status, now);
   const cost = costs(status);
-  const on = effectiveBeat(status) === "on";
+  const beatState = effectiveBeat(status, now);
+  const on = beatState === "on";
   const phaseColor =
     est.phase === "warm" ? theme.colors.statusSuccess : est.phase === "cold" ? theme.colors.statusDanger : theme.colors.statusWarning;
   const phaseText = est.phase === "warm" ? "Warm" : est.phase === "cold" ? "Cold" : "Unknown";
@@ -154,11 +155,13 @@ export function CachePopover(props: PluginButtonContentProps) {
       <Row
         k="Cachebeat"
         v={
-          status.beat.state === "unknown" && !on && status.defaultOn === null
-            ? "unknown, press Sync exact state"
-            : on
-              ? `on, every ${est.intervalMin ?? status.beat.intervalMin ?? "?"}m${status.beat.state === "unknown" ? " (default)" : ""}`
-              : `off${status.beat.state === "unknown" ? " (default)" : ""}`
+          beatState === "stopped" && status.stop
+            ? `stopped itself ${formatDuration(now - status.stop.at)} ago: ${status.stop.why}`
+            : beatState === "unknown"
+              ? "unknown, press Sync exact state"
+              : on
+                ? `on, every ${est.intervalMin ?? status.beat.intervalMin ?? "?"}m`
+                : `off${status.beat.state === "unknown" ? " (default)" : ""}`
         }
       />
       {est.nextBeatAt !== null ? (

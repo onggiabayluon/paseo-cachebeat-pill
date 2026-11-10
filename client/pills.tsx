@@ -68,7 +68,7 @@ export function contributeCachePills(client: PluginClientContext): () => void {
       entry.registration = null;
       return;
     }
-    const icon = effectiveBeat(status) === "on" ? HeartFilled : HeartOutline;
+    const icon = effectiveBeat(status, now) === "on" ? HeartFilled : HeartOutline;
     if (entry.registration) {
       entry.registration.update({ label, title: pillTitle(status), icon });
       return;
